@@ -19,8 +19,30 @@ The whole point of this skill is that session length must never be the thing tha
 
 ## Locate the source
 
-- **Documenting the current conversation**: you already have it in context. Batch by turn ranges directly.
-- **Documenting a different session**: the user will point you at a transcript file or export. Read it in batches from disk rather than loading it whole — same reasoning as above.
+There are three possible sources, and they carry different fidelity guarantees. Use whichever matches what you're documenting, and be honest in each node's `wasDerivedFrom` about which one you used — don't let a lower-fidelity source's provenance read as if it were precise.
+
+### 1. The current conversation (live context)
+
+Only safe to batch directly from context if the session is short enough that the harness hasn't compressed anything yet. Long conversations get automatically compressed as they approach context limits — once that's happened, your live view of the earlier turns is already lossy, which defeats the entire point of this skill for exactly the turns that got compressed away. If the session is long, or you're not sure whether compression has happened, prefer option 2 below even for the current session — it's the same underlying file, and it's guaranteed not to be compressed.
+
+### 2. A local Claude Code session (current or past) — read the on-disk transcript
+
+Claude Code persists every session as a JSONL file at:
+```
+~/.claude/projects/<project-slug>/<session-id>.jsonl
+```
+`<project-slug>` is the working directory path with `/` replaced by `-`. If you don't know the session id, the session-management tools (`list_sessions` / `get_session`, when available) can look it up by title, working directory, or recent activity.
+
+This file is the durable, uncompressed record — read it in batches directly from disk rather than through live context, regardless of session length. Each line is a JSON object with a `type` field. The ones worth extracting knowledge from are `user`, `assistant`, and `attachment`. Skip `system`, `queue-operation`, `last-prompt`, and `ai-title` entries — those are harness bookkeeping, not conversational content.
+
+### 3. A manually exported or pasted transcript
+
+For anything outside Claude Code's own session storage — a claude.ai conversation, a Chat-mode conversation, or any other source — there's no file for you to read directly. The user has to export or copy the conversation themselves (claude.ai's account-level data export if available, or a plain copy-paste of the visible text) and save any images/attachments separately, then hand you the resulting file(s).
+
+This source has real, permanent fidelity limits compared to the other two, and every node extracted from it should say so honestly rather than imply precision it doesn't have:
+- **No exact turn boundaries** — batch by natural paragraph/section breaks instead, and use approximate language in `wasDerivedFrom` (e.g. "manually exported conversation, pricing-discussion section") rather than a turn range.
+- **No structured tool-call data** — you only have what was visibly rendered in the chat, nothing that happened behind the scenes.
+- **Media must have been staged separately** by the user before you start — check for it explicitly rather than assuming it travelled with the text.
 
 ## Before you start: check the existing corpus
 
